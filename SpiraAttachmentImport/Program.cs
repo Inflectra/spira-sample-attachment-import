@@ -8,6 +8,7 @@ using System.Linq;
 using System.ServiceModel;
 using System.ServiceModel.Description;
 using System.Text;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 
 namespace SpiraAttachmentImport
@@ -33,6 +34,48 @@ namespace SpiraAttachmentImport
                     return;
                 }
 
+                //See if we have a mappings file specified, if so, make sure it exists
+                List<ArtifactMapping> artifactMappings = null;
+                string customPropertyField = null;
+                if (!String.IsNullOrWhiteSpace(_options.SpiraMappingsFile))
+                {
+                    if (!File.Exists(_options.SpiraMappingsFile))
+                    {
+                        //Throw error: Bad path.
+                        ConsoleLog(LogLevelEnum.Normal, "Cannot access the mapping file, please check the location and try again!");
+                        Environment.Exit(-1);
+                    }
+                    artifactMappings = new List<ArtifactMapping>();
+
+                    //Read in the lines, the first column should contain:
+                    //Filename,ArtifactTypeId,Custom_03
+                    //where the number in the third column is the name of the custom property that the IDs will be using
+                    using (StreamReader streamReader = File.OpenText(_options.SpiraMappingsFile))
+                    {
+                        string firstLine = streamReader.ReadLine();
+                        string[] headings = firstLine.Split(',');
+
+                        //See if we have a match on the custom property number
+                        if (headings.Length > 2 && !String.IsNullOrWhiteSpace(headings[2]))
+                        {
+                            customPropertyField = headings[2].Trim();
+
+                            //Now read in the rows of mappings
+                            while (!streamReader.EndOfStream)
+                            {
+                                string mappingLine = streamReader.ReadLine();
+                                ArtifactMapping artifactMapping = new ArtifactMapping();
+                                string[] components = mappingLine.Split(',');
+                                artifactMapping.Filename = components[0];
+                                artifactMapping.ArtifactTypeId = Int32.Parse(components[1]);
+                                artifactMapping.ExternalKey = components[2];
+                                artifactMappings.Add(artifactMapping);
+                            }
+                            streamReader.Close();
+                        }
+                    }
+                }
+
                 //Make sure the path given is a real path..
                 try
                 {
@@ -41,6 +84,8 @@ namespace SpiraAttachmentImport
                 catch
                 {
                     //Throw error: Bad path.
+                    ConsoleLog(LogLevelEnum.Normal, "Cannot access the import path, please check the location and try again!");
+                    Environment.Exit(-1);
                 }
 
                 //Tell user we're operating.
@@ -95,13 +140,46 @@ namespace SpiraAttachmentImport
                                     newFile.Size = (int)fileInf.Length;
                                     newFile.UploadDate = DateTime.UtcNow;
 
+                                    //Now we see if have mapped artifact
+                                    ArtifactMapping mappedArtifact = artifactMappings.FirstOrDefault(m => m.Filename.ToLowerInvariant() == newFile.FilenameOrUrl.ToLowerInvariant());
+                                    if (mappedArtifact != null && !String.IsNullOrEmpty(customPropertyField))
+                                    {
+                                        //We have to lookup the artifact, currently only incidents are supported
+                                        if (mappedArtifact.ArtifactTypeId == 3)
+                                        {
+                                            //Retrieve the incident
+                                            RemoteSort sort = new RemoteSort();
+                                            sort.PropertyName = "IncidentId";
+                                            sort.SortAscending = true;
+                                            List<RemoteFilter> filters = new List<RemoteFilter>();
+                                            RemoteFilter filter = new RemoteFilter();
+                                            filter.PropertyName = customPropertyField;
+                                            filter.StringValue = mappedArtifact.ExternalKey;
+                                            filters.Add(filter);
+                                            RemoteIncident remoteIncident = client.Incident_Retrieve(filters, sort, 1, 1).FirstOrDefault();
+
+                                            if (remoteIncident != null)
+                                            {
+                                                RemoteLinkedArtifact remoteLinkedArtifact = new SpiraService.RemoteLinkedArtifact();
+                                                remoteLinkedArtifact.ArtifactTypeId = mappedArtifact.ArtifactTypeId;
+                                                remoteLinkedArtifact.ArtifactId = remoteIncident.IncidentId.Value;
+                                                newFile.AttachedArtifacts = new List<RemoteLinkedArtifact>();
+                                                newFile.AttachedArtifacts.Add(remoteLinkedArtifact);
+                                            }
+                                        }
+                                        else
+                                        {
+                                            ConsoleLog(LogLevelEnum.Normal, "Warning: Only incident mapped artifacts currently supported, so ignoring the mapped artifacts of type: " + mappedArtifact.ArtifactTypeId);
+                                        }
+                                    }
+
                                     //Read the file contents. (Into memory! Beware, large files!)
                                     byte[] fileContents = null;
                                     fileContents = File.ReadAllBytes(file);
 
                                     ConsoleLog(LogLevelEnum.Verbose, conLog);
                                     if (fileContents != null && fileContents.Length > 1)
-                                        client.Document_AddFile(newFile, fileContents);
+                                        newFile.AttachmentId = client.Document_AddFile(newFile, fileContents).AttachmentId.Value;
                                     else
                                         throw new FileEmptyException();
                                 }

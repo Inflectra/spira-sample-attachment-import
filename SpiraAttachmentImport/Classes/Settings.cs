@@ -32,6 +32,10 @@ namespace SpiraAttachmentImport.Classes
         [Option('t', "project", Required = true, HelpText = "The project # to import the attachments into.")]
         public long SpiraProject { get; set; }
 
+        /// <summary>The password for the user to log in as.</summary>
+        [Option('m', "map", Required = true, HelpText = "A CSV file that maps the files to imported artifacts.")]
+        public string SpiraMappingsFile { get; set; }
+
         /// <summary>The filter to run on importing files. (Defaults *.*)</summary>
         [Option('f', "filter", DefaultValue = "*.*", HelpText = "File mask to filter imports on.")]
         public string ImportFilter { get; set; }
@@ -59,7 +63,7 @@ namespace SpiraAttachmentImport.Classes
                 AdditionalNewLineAfterOption = false,
                 AddDashesToOption = true
             };
-            help.AddPreOptionsLine("Usage: " + Environment.NewLine + "  " + typeof(Program).Assembly.GetName().Name + ".exe -s http://localhost/Spira -u administrator -p PleaseChange1 -r 2 C:\\TempUpload");
+            help.AddPreOptionsLine("Usage: " + Environment.NewLine + "  " + typeof(Program).Assembly.GetName().Name + ".exe -s http://localhost/Spira -u administrator -p PleaseChange1-t 2 -m mappings.csv -r C:\\TempUpload");
             help.AddOptions(this);
             help.MaximumDisplayWidth = 1024;
             return help;
