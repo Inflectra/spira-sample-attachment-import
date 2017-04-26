@@ -1,0 +1,1 @@
+SpiraAttachmentImport.exe -s http://localhost/Spira -u administrator -p PleaseChange -t 2 -m C:\Temp\Import\mappings.csv -r C:\Temp\Import\Attachments
