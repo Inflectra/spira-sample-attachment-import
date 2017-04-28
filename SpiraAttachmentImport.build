@@ -1,0 +1,16 @@
+<?xml version="1.0"?>
+<project name="Spira Attachment Import" default="zipup">
+	<target name="zipup" description="Zips up the whole application for deployment">
+		<echo message="Zipping up entire application" />
+		<zip zipfile="SpiraAttachmentImport.zip" verbose="true" comment="Spira Attachment Import">
+			<fileset basedir="SpiraAttachmentImport/bin/Debug">
+				<include name="*.dll" />
+				<include name="SpiraAttachmentImport.exe" />
+				<include name="SpiraAttachmentImport.exe.config" />
+			</fileset>
+			<fileset basedir="SpiraAttachmentImport">
+				<include name="*.txt" />
+			</fileset>
+		</zip>
+	</target>	
+</project>
